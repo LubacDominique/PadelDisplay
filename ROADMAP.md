@@ -44,7 +44,7 @@
   - [x] Effet de "balle" sur changement de service
   - Célébration fin de set/match
 
-- [ ] **Indicateurs visuels**
+- [x] **Indicateurs visuels**
   - Barre de progression du jeu
   - Indicateur de service
   - Timer entre les points

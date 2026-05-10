@@ -144,6 +144,10 @@ unsigned long lastConnLossTime = 0;
 int lastConnLossPlayer = 0;
 #define CONN_LOSS_MSG_DURATION 3000 // Durée du message d'alerte en ms
 
+// État des indicateurs visuels (V1.1 Roadmap)
+unsigned long lastPointTime = 0;
+#define POINT_TIMER_WARN 20 // Temps d'alerte orange en secondes (règle des 20-25s)
+
 // Objet PNG decoder
 PNG png;
 
@@ -218,6 +222,7 @@ void resetMatch() {
     initPlayer(player2);
     isDeuce = false;
     gameInProgress = true;
+    lastPointTime = millis();
     waitingForSetContinue = false;
     currentServer = 1;  // Le joueur 1 commence à servir
     Serial.println("Match réinitialisé");
@@ -432,6 +437,25 @@ void displayScore(bool showServiceChange) {
     dma_display->setCursor(p2X, y);
     dma_display->setTextColor(COLOR_GREEN);
     dma_display->print(p2Score);
+
+    // 1. Barres de progression du jeu (V1.1 Roadmap)
+    // Progression Joueur 1
+    int p1ProgW = 22;
+    dma_display->drawRect(2, 17, p1ProgW, 2, rgb565(40, 40, 40)); // Fond gris
+    int p1Val = player1.hasAdvantage ? 3 : player1.points;
+    if (p1Val > 0) {
+        int prog = map(min(p1Val, 3), 0, 3, 0, p1ProgW - 2);
+        dma_display->fillRect(3, 18, prog, 1, COLOR_RED);
+    }
+    
+    // Progression Joueur 2
+    int p2ProgW = 22;
+    dma_display->drawRect(40, 17, p2ProgW, 2, rgb565(40, 40, 40)); // Fond gris
+    int p2Val = player2.hasAdvantage ? 3 : player2.points;
+    if (p2Val > 0) {
+        int prog = map(min(p2Val, 3), 0, 3, 0, p2ProgW - 2);
+        dma_display->fillRect(41, 18, prog, 1, COLOR_GREEN);
+    }
     
     // Affichage des jeux (ligne du bas)
     dma_display->setTextSize(1);
@@ -450,6 +474,18 @@ void displayScore(bool showServiceChange) {
     dma_display->print(player2.games);
     dma_display->print("]");
     
+    // 2. Timer entre les points (V1.1 Roadmap)
+    if (lastPointTime > 0 && !waitingForSetContinue && gameInProgress) {
+        unsigned long seconds = (millis() - lastPointTime) / 1000;
+        if (seconds < 100) {
+            dma_display->setTextSize(1); // Taille de texte 1 (8 pixels de haut)
+            dma_display->setCursor(28, 16); // Positionné entre les barres de progression (y=17) et les jeux (y=22)
+            dma_display->setTextColor(seconds >= POINT_TIMER_WARN ? COLOR_ORANGE : COLOR_WHITE);
+            if (seconds < 10) dma_display->print("0");
+            dma_display->print(seconds);
+        }
+    }
+
     // Indicateurs de connexion BLE (petits points)
     if (player1.connected) {
         dma_display->fillCircle(1, 30, 1, COLOR_CYAN);
@@ -871,6 +907,7 @@ void addPoint(Player &player, Player &opponent, int playerNum) {
     }
     
     player.points++;
+    lastPointTime = millis(); // Reset du timer au point marqué
     Serial.printf("Joueur %d: +1 point (total: %d)\n", playerNum, player.points);
     
     // Gestion du deuce et de l'avantage
@@ -910,6 +947,7 @@ void removePoint(Player &player, int playerNum) {
     
     if (player.points > 0) {
         player.points--;
+        lastPointTime = millis(); // Reset du timer à la correction
         Serial.printf("Joueur %d: -1 point (total: %d)\n", playerNum, player.points);
         
         // Réajuster deuce/avantage si nécessaire
@@ -938,6 +976,7 @@ void handlePlayerClick(Player &player, Player &opponent, int playerNum) {
     if (waitingForSetContinue) {
         Serial.printf("▶️  Joueur %d a cliqué → Reprise du jeu\n", playerNum);
         waitingForSetContinue = false;
+        lastPointTime = millis();
         
         // Vérifier si le match est terminé
         checkMatchWon();
@@ -1351,6 +1390,7 @@ void setup() {
     
     // Initialiser le timestamp de reconnexion
     lastBleScanTime = millis();
+    lastPointTime = millis();
     
     // Affichage du score initial
     displayScore();
@@ -1370,6 +1410,15 @@ void loop() {
     // Gestion des alertes visuelles de déconnexion
     checkConnLossAlert();
     
+    // Rafraîchir l'affichage du timer toutes les secondes (Roadmap V1.1)
+    static unsigned long lastTimerRefresh = 0;
+    if (millis() - lastTimerRefresh >= 1000) {
+        if (lastPointTime > 0 && gameInProgress && !waitingForSetContinue) {
+            displayScore(true); // Rafraîchissement non-bloquant
+        }
+        lastTimerRefresh = millis();
+    }
+
     // Traiter les clics en attente (après expiration du délai double-clic)
     processPendingClicks();
     
