@@ -53,10 +53,10 @@
 
 ### Fonctionnalités Avancées
 
-- [ ] **Chronomètre intégré**
-  - Temps de jeu total
-  - Temps entre les points
-  - Affichage optionnel
+- [x] **Chronomètre intégré**
+  - [x] Temps de jeu total
+  - [x] Temps entre les points
+  - [ ] Affichage optionnel
 
 - [ ] **Statistiques de match**
   - Nombre total de points

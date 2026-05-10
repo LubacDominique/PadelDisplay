@@ -145,6 +145,7 @@ int lastConnLossPlayer = 0;
 #define CONN_LOSS_MSG_DURATION 3000 // Durée du message d'alerte en ms
 
 // État des indicateurs visuels (V1.1 Roadmap)
+unsigned long matchStartTime = 0;
 unsigned long lastPointTime = 0;
 #define POINT_TIMER_WARN 20 // Temps d'alerte orange en secondes (règle des 20-25s)
 
@@ -172,7 +173,7 @@ float getBatteryVoltage();
 int getBatteryPercentage();
 void checkConnLossAlert();
 void updateBatteryLevel();
-void displayBatteryLevel();
+void displayBatteryLevel(int x, int y);
 
 // ============================================================================
 // COULEURS RGB565 POUR LE PANNEAU LED
@@ -223,6 +224,9 @@ void resetMatch() {
     isDeuce = false;
     gameInProgress = true;
     lastPointTime = millis();
+    matchStartTime = millis();
+    lastPointTime = 0;
+    matchStartTime = 0;
     waitingForSetContinue = false;
     currentServer = 1;  // Le joueur 1 commence à servir
     Serial.println("Match réinitialisé");
@@ -321,12 +325,9 @@ void updateBatteryLevel() {
  * Affiche l'indicateur de batterie sur le panneau LED
  * Format: icône + pourcentage
  */
-void displayBatteryLevel() {
-    // Position: centre bas, entre les jeux des deux joueurs
-    // Jeux affichés à y=22, on place la batterie à y=24 pour la ligne du bas
-    int x = 30;  // Centre horizontal (64 pixels de large, icône+texte ≈ 20px)
-    int y = 24;  // Bas du panneau, sous les jeux
-    
+void displayBatteryLevel(int x, int y) {
+    if (x < 0 || y < 0) return;
+
     dma_display->setTextSize(1);
     
     // Couleur selon niveau de charge
@@ -461,29 +462,38 @@ void displayScore(bool showServiceChange) {
     dma_display->setTextSize(1);
     
     // Jeux joueur 1
-    dma_display->setCursor(8, 22);
+    dma_display->setCursor(5, 24);
     dma_display->setTextColor(COLOR_YELLOW);
-    dma_display->print("[");
     dma_display->print(player1.games);
-    dma_display->print("]");
     
     // Jeux joueur 2
-    dma_display->setCursor(42, 22);
+    dma_display->setCursor(53, 24);
     dma_display->setTextColor(COLOR_YELLOW);
-    dma_display->print("[");
     dma_display->print(player2.games);
-    dma_display->print("]");
     
     // 2. Timer entre les points (V1.1 Roadmap)
     if (lastPointTime > 0 && !waitingForSetContinue && gameInProgress) {
         unsigned long seconds = (millis() - lastPointTime) / 1000;
         if (seconds < 100) {
             dma_display->setTextSize(1); // Taille de texte 1 (8 pixels de haut)
-            dma_display->setCursor(28, 16); // Positionné entre les barres de progression (y=17) et les jeux (y=22)
+            dma_display->setCursor(28, 14); // Positionné entre les barres de progression (y=17) et les jeux (y=22)
             dma_display->setTextColor(seconds >= POINT_TIMER_WARN ? COLOR_ORANGE : COLOR_WHITE);
             if (seconds < 10) dma_display->print("0");
             dma_display->print(seconds);
         }
+    }
+
+    // 3. Chronomètre de match (V1.2 Roadmap)
+    if (matchStartTime > 0 && gameInProgress) {
+        unsigned long totalSeconds = (millis() - matchStartTime) / 1000;
+        int mins = totalSeconds / 60;
+        int secs = totalSeconds % 60;
+        char timeStr[8];
+        if (mins < 100) sprintf(timeStr, "%02d:%02d", mins, secs);
+        else sprintf(timeStr, "%d:%02d", mins, secs);
+        dma_display->setCursor(17, 21);
+        dma_display->setTextColor(COLOR_CYAN);
+        dma_display->print(timeStr);
     }
 
     // Indicateurs de connexion BLE (petits points)
@@ -510,7 +520,7 @@ void displayScore(bool showServiceChange) {
     }
     
     // Affichage du niveau de batterie
-    displayBatteryLevel();
+    displayBatteryLevel(28, 28);
 }
 
 /**
@@ -971,6 +981,13 @@ void removePoint(Player &player, int playerNum) {
 void handlePlayerClick(Player &player, Player &opponent, int playerNum) {
     unsigned long currentTime = millis();
     unsigned long timeSinceLastClick = currentTime - player.lastClickTime;
+
+    // Démarrer les chronomètres au premier clic (Roadmap V1.2)
+    if (matchStartTime == 0) {
+        matchStartTime = currentTime;
+        lastPointTime = currentTime;
+        Serial.println("⏱️ Premier clic détecté : Lancement des chronomètres !");
+    }
     
     // Si on attend la continuation après un set gagné, n'importe quel clic continue
     if (waitingForSetContinue) {
@@ -1391,6 +1408,9 @@ void setup() {
     // Initialiser le timestamp de reconnexion
     lastBleScanTime = millis();
     lastPointTime = millis();
+    matchStartTime = millis();
+    lastPointTime = 0;
+    matchStartTime = 0;
     
     // Affichage du score initial
     displayScore();
@@ -1433,11 +1453,19 @@ void loop() {
         switch (cmd) {
             case '1':  // Point joueur 1
             case '+':
+                if (matchStartTime == 0) {
+                    matchStartTime = millis();
+                    lastPointTime = matchStartTime;
+                }
                 addPoint(player1, player2, 1);
                 break;
                 
             case '2':  // Point joueur 2
             case '=':
+                if (matchStartTime == 0) {
+                    matchStartTime = millis();
+                    lastPointTime = matchStartTime;
+                }
                 addPoint(player2, player1, 2);
                 break;
                 
