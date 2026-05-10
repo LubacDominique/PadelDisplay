@@ -41,7 +41,7 @@
 
 - [ ] **Animations améliorées**
   - Transition fluide entre les scores
-  - Effet de "balle" sur changement de service
+  - [x] Effet de "balle" sur changement de service
   - Célébration fin de set/match
 
 - [ ] **Indicateurs visuels**

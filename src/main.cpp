@@ -124,6 +124,7 @@ bool isDeuce = false;           // Égalité à 40-40
 bool gameInProgress = true;     // Partie en cours
 String lastMessage = "";        // Dernier message affiché
 bool waitingForSetContinue = false;  // Attend un clic pour continuer après victoire de set
+int currentServer = 1;          // Joueur qui sert actuellement (1 ou 2)
 
 // BLE Scan
 NimBLEScan* pBLEScan;
@@ -149,11 +150,12 @@ int bufferLineIndex = 0;  // Index de ligne pour remplir le buffer
 // DÉCLARATIONS FORWARD DES FONCTIONS
 // ============================================================================
 
-void displayScore();
+void displayScore(bool showServiceChange = true);
 void displayGameWon(int playerNum);
 void displaySetWon(int playerNum);
 void displayMatchWon(int playerNum);
 void displaySetImage();
+void displayBallServiceChange(int fromPlayer, int toPlayer);
 void checkGameWon();
 void checkSetWon();
 void checkMatchWon();
@@ -211,6 +213,7 @@ void resetMatch() {
     isDeuce = false;
     gameInProgress = true;
     waitingForSetContinue = false;
+    currentServer = 1;  // Le joueur 1 commence à servir
     Serial.println("Match réinitialisé");
 }
 
@@ -398,9 +401,10 @@ String getPointsDisplay(Player &player, Player &opponent) {
 /**
  * Affiche le score actuel
  */
-void displayScore() {
+void displayScore(bool showServiceChange) {
+     // Si showServiceChange est true, afficher une animation de service
     clearDisplay();
-    
+    int16_t y=1;
     String p1Score = getPointsDisplay(player1, player2);
     String p2Score = getPointsDisplay(player2, player1);
     
@@ -408,18 +412,18 @@ void displayScore() {
     dma_display->setTextSize(2);
     
     // Score joueur 1 (gauche)
-    dma_display->setCursor(2, 2);
+    dma_display->setCursor(2, y);
     dma_display->setTextColor(COLOR_RED);
     dma_display->print(p1Score);
     
     // Séparateur
-    dma_display->setCursor(26, 2);
+    dma_display->setCursor(26, y);
     dma_display->setTextColor(COLOR_WHITE);
     dma_display->print("-");
     
     // Score joueur 2 (droite)
     int p2X = (p2Score.length() > 2) ? 34 : 38;  // Ajustement pour "ADV" ou "AV"
-    dma_display->setCursor(p2X, 2);
+    dma_display->setCursor(p2X, y);
     dma_display->setTextColor(COLOR_GREEN);
     dma_display->print(p2Score);
     
@@ -446,6 +450,15 @@ void displayScore() {
     }
     if (player2.connected) {
         dma_display->fillCircle(62, 30, 1, COLOR_CYAN);
+    }
+    
+    // Indicateur de service: petite balle à côté du score du serveur
+    if(showServiceChange) {
+        if (currentServer == 1) {
+            dma_display->fillCircle(2, PANEL_RES_Y / 2+2, 2, COLOR_YELLOW);  // Balle jaune à gauche
+        } else {
+            dma_display->fillCircle(61, PANEL_RES_Y / 2+2, 2, COLOR_YELLOW);  // Balle jaune à droite
+        }
     }
     
     // Affichage du niveau de batterie
@@ -658,6 +671,66 @@ void displayMatchWon(int playerNum) {
     gameInProgress = false;
 }
 
+/**
+ * Affiche l'animation de "balle" lors du changement de service
+ * Une balle traverse l'écran du joueur fromPlayer vers le joueur toPlayer
+ */
+void displayBallServiceChange(int fromPlayer, int toPlayer) {
+    Serial.printf("Animation changement de service: J%d → J%d\n", fromPlayer, toPlayer);
+    
+    // Direction: de gauche à droite si fromPlayer=1, de droite à gauche si fromPlayer=2
+    int startX = (fromPlayer == 1) ? 2 : (PANEL_RES_X - 3);
+    int endX = (fromPlayer == 1) ? (PANEL_RES_X - 3) : 2;
+    int direction = (fromPlayer == 1) ? 1 : -1;
+    
+    int ballY = PANEL_RES_Y / 2+2;  // Milieu de l'écran verticalement
+    int ballRadius = 2;
+    
+    // Couleur de la balle: jaune vif pour visibilité
+    uint16_t ballColor = COLOR_YELLOW;
+    
+    // Animation: la balle traverse l'écran
+    int numSteps = 20;  // Nombre d'étapes d'animation
+    int stepSize = abs(endX - startX) / numSteps;
+    if (stepSize < 1) stepSize = 1;
+    
+    for (int x = startX; 
+         (direction > 0 && x < endX) || (direction < 0 && x > endX); 
+         x += direction * stepSize) {
+        
+        // Afficher le score en arrière-plan (semi-transparent via effacement partiel)
+        displayScore(false);
+        
+        // Dessiner la balle
+        dma_display->fillCircle(x, ballY, ballRadius, ballColor);
+        
+        // Petite traînée pour effet de mouvement
+        if (x - direction * stepSize >= 0 && x - direction * stepSize < PANEL_RES_X) {
+            dma_display->fillCircle(x - direction * stepSize, ballY, ballRadius - 1, 
+                                   rgb565(128, 128, 0));  // Traînée jaune foncé
+        }
+        
+        delay(30);  // Délai pour animation fluide
+    }
+    
+    // Dernière position de la balle
+    displayScore();
+    dma_display->fillCircle(endX, ballY, ballRadius, ballColor);
+    delay(200);
+    
+    // Effet de "rebond" à l'arrivée
+    for (int i = 0; i < 3; i++) {
+        displayScore();
+        dma_display->fillCircle(endX, ballY - 2, ballRadius, ballColor);
+        delay(50);
+        displayScore();
+        dma_display->fillCircle(endX, ballY, ballRadius, ballColor);
+        delay(50);
+    }
+    
+    Serial.println("Animation changement de service terminée");
+}
+
 // ============================================================================
 // LOGIQUE DU JEU DE PADEL
 // ============================================================================
@@ -695,6 +768,13 @@ void checkGameWon() {
         
         displayGameWon(winnerNum);
         resetGame();
+        
+        // Animation de changement de service (la balle passe au joueur suivant)
+        int previousServer = currentServer;
+        currentServer = (currentServer == 1) ? 2 : 1;  // Alternance du service
+        Serial.printf("Changement de service: J%d → J%d\n", previousServer, currentServer);
+        displayBallServiceChange(previousServer, currentServer);
+        
         checkSetWon();
         
         // Ne pas afficher le score si on attend la continuation après un set gagné
