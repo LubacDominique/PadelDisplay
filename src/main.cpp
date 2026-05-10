@@ -139,6 +139,11 @@ float currentBatteryVoltage = 0.0;
 int currentBatteryPercentage = 0;
 unsigned long lastBatteryReadTime = 0;
 
+// État des alertes de connexion
+unsigned long lastConnLossTime = 0;
+int lastConnLossPlayer = 0;
+#define CONN_LOSS_MSG_DURATION 3000 // Durée du message d'alerte en ms
+
 // Objet PNG decoder
 PNG png;
 
@@ -161,6 +166,7 @@ void checkSetWon();
 void checkMatchWon();
 float getBatteryVoltage();
 int getBatteryPercentage();
+void checkConnLossAlert();
 void updateBatteryLevel();
 void displayBatteryLevel();
 
@@ -447,9 +453,15 @@ void displayScore(bool showServiceChange) {
     // Indicateurs de connexion BLE (petits points)
     if (player1.connected) {
         dma_display->fillCircle(1, 30, 1, COLOR_CYAN);
+    } else {
+        // Clignotement rouge si déconnecté (toutes les 500ms)
+        if ((millis() / 500) % 2 == 0) dma_display->fillCircle(1, 30, 1, COLOR_RED);
     }
+
     if (player2.connected) {
         dma_display->fillCircle(62, 30, 1, COLOR_CYAN);
+    } else {
+        if ((millis() / 500) % 2 == 0) dma_display->fillCircle(62, 30, 1, COLOR_RED);
     }
     
     // Indicateur de service: petite balle à côté du score du serveur
@@ -995,14 +1007,18 @@ class MyClientCallback : public NimBLEClientCallbacks {
         // Marquer comme déconnecté
         if (player1.bleClient == pclient) {
             player1.connected = false;
-            Serial.println("Joueur 1 déconnecté");
+            lastConnLossPlayer = 1;
+            lastConnLossTime = millis();
+            Serial.println("⚠️ Joueur 1 déconnecté !");
         }
         if (player2.bleClient == pclient) {
             player2.connected = false;
-            Serial.println("Joueur 2 déconnecté");
+            lastConnLossPlayer = 2;
+            lastConnLossTime = millis();
+            Serial.println("⚠️ Joueur 2 déconnecté !");
         }
         
-        displayScore();
+        // Le réaffichage est géré par checkConnLossAlert() dans la loop
     }
 };
 
@@ -1215,6 +1231,29 @@ void processPendingClicks() {
     }
 }
 
+/**
+ * Vérifie s'il faut afficher ou effacer une alerte de perte de connexion
+ */
+void checkConnLossAlert() {
+    static bool isAlerting = false;
+    
+    if (lastConnLossTime > 0) {
+        if (millis() - lastConnLossTime < CONN_LOSS_MSG_DURATION) {
+            if (!isAlerting) {
+                isAlerting = true;
+                char msg[16];
+                sprintf(msg, "PERTE J%d", lastConnLossPlayer);
+                displayMessage(msg, COLOR_RED);
+            }
+        } else {
+            // Fin de l'alerte, on nettoie et on restaure le score
+            lastConnLossTime = 0;
+            isAlerting = false;
+            displayScore();
+        }
+    }
+}
+
 // ============================================================================
 // SETUP ET LOOP
 // ============================================================================
@@ -1327,6 +1366,9 @@ void loop() {
     
     // Gestion de la reconnexion BLE
     handleBLEReconnection();
+
+    // Gestion des alertes visuelles de déconnexion
+    checkConnLossAlert();
     
     // Traiter les clics en attente (après expiration du délai double-clic)
     processPendingClicks();

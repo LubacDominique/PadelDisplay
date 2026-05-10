@@ -15,7 +15,7 @@
 
 ### Améliorations BLE
 
-- [ ] **Reconnexion automatique améliorée**
+- [x] **Reconnexion automatique améliorée**
   - Détection de perte de connexion
   - Tentative de reconnexion en arrière-plan
   - Notification visuelle sur le panneau
