@@ -1392,7 +1392,9 @@ void setup() {
     Serial.println("Panneau LED initialisé");
     
     // Message de bienvenue
-    displayMessage("PADEL", COLOR_YELLOW);
+    displayMessage("CYRIL", COLOR_YELLOW);
+    delay(2000);
+    displayMessage("THE BEST", COLOR_YELLOW);
     delay(2000);
     
     // Initialisation des joueurs
@@ -1400,7 +1402,7 @@ void setup() {
     initPlayer(player2);
     
     // Initialisation BLE
-    displayMessage("BLE...", COLOR_CYAN);
+    displayMessage("ETAG...", COLOR_CYAN);
     initBLE();
     scanBLE();
     delay(BLE_SCAN_DURATION * 1000 + 1000);
