@@ -64,8 +64,10 @@
 // Adresses MAC des eTags (à modifier selon vos appareils)
 // Format: "xx:xx:xx:xx:xx:xx" (MINUSCULES obligatoires)
 // Laisser vide pour auto-détection des premiers iTags trouvés
-String PLAYER1_MAC = "ff:ff:a0:04:cc:1f";  // eTag Joueur 1 (gauche)
-String PLAYER2_MAC = "ff:ff:a0:04:a6:63";  // eTag Joueur 2 (droite)
+//String PLAYER1_MAC = "ff:ff:a0:04:cc:1f";  // eTag Joueur 1 (gauche)
+//String PLAYER2_MAC = "ff:ff:a0:04:a6:63";  // eTag Joueur 2 (droite)
+String PLAYER1_MAC = "";  // eTag Joueur 1 (gauche)
+String PLAYER2_MAC = "";  // eTag Joueur 2 (droite)
 
 // UUIDs des services BLE (iTags standards)
 static NimBLEUUID serviceUUID("0000ffe0-0000-1000-8000-00805f9b34fb");
