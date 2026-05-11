@@ -73,6 +73,10 @@ String PLAYER2_MAC = "";  // eTag Joueur 2 (droite)
 static NimBLEUUID serviceUUID("0000ffe0-0000-1000-8000-00805f9b34fb");
 static NimBLEUUID charUUID("0000ffe1-0000-1000-8000-00805f9b34fb");
 
+// UUIDs pour la batterie des eTags (Standard BLE Battery Service)
+static NimBLEUUID battServiceUUID((uint16_t)0x180F);
+static NimBLEUUID battCharUUID((uint16_t)0x2A19);
+
 // ============================================================================
 // CONFIGURATION MESURE BATTERIE LiFePO4 12.8V 20Ah (3S)
 // ============================================================================
@@ -116,6 +120,7 @@ struct Player {
     NimBLEClient* bleClient;    // Client BLE
     NimBLERemoteCharacteristic* bleCharacteristic;  // Caractéristique BLE pour notifications
     bool connected;     // État de connexion BLE
+    int eTagBatteryLevel; // Niveau batterie eTag (0-100)
 };
 
 Player player1;
@@ -140,6 +145,11 @@ NimBLEAddress* discoveredPlayer2Address = nullptr;
 float currentBatteryVoltage = 0.0;
 int currentBatteryPercentage = 0;
 unsigned long lastBatteryReadTime = 0;
+
+// État des alertes batterie eTag
+unsigned long lastLowBatTime = 0;
+int lowBatPlayer = 0;
+#define LOW_BAT_MSG_DURATION 3000 // Durée du message d'alerte en ms
 
 // État des alertes de connexion
 unsigned long lastConnLossTime = 0;
@@ -173,6 +183,7 @@ void checkSetWon();
 void checkMatchWon();
 float getBatteryVoltage();
 int getBatteryPercentage();
+void checkETagBatteryAlert();
 void checkConnLossAlert();
 void updateBatteryLevel();
 void displayBatteryLevel(int x, int y);
@@ -215,6 +226,7 @@ void initPlayer(Player &player) {
     player.bleClient = nullptr;
     player.bleCharacteristic = nullptr;
     player.connected = false;
+    player.eTagBatteryLevel = -1; // -1 signifie inconnu
 }
 
 /**
@@ -500,14 +512,16 @@ void displayScore(bool showServiceChange) {
 
     // Indicateurs de connexion BLE (petits points)
     if (player1.connected) {
-        dma_display->fillCircle(1, 30, 1, COLOR_CYAN);
+        uint16_t p1DotColor = (player1.eTagBatteryLevel >= 0 && player1.eTagBatteryLevel < 25) ? COLOR_ORANGE : COLOR_CYAN;
+        dma_display->fillCircle(1, 30, 1, p1DotColor);
     } else {
         // Clignotement rouge si déconnecté (toutes les 500ms)
         if ((millis() / 500) % 2 == 0) dma_display->fillCircle(1, 30, 1, COLOR_RED);
     }
 
     if (player2.connected) {
-        dma_display->fillCircle(62, 30, 1, COLOR_CYAN);
+        uint16_t p2DotColor = (player2.eTagBatteryLevel >= 0 && player2.eTagBatteryLevel < 25) ? COLOR_ORANGE : COLOR_CYAN;
+        dma_display->fillCircle(62, 30, 1, p2DotColor);
     } else {
         if ((millis() / 500) % 2 == 0) dma_display->fillCircle(62, 30, 1, COLOR_RED);
     }
@@ -1188,6 +1202,19 @@ bool connectPlayer(NimBLEAddress* address, Player& player, int playerNum) {
                 
                 // Délai minimal pour la configuration BLE
                 delay(100);
+
+                // --- RÉCUPÉRATION NIVEAU BATTERIE ETAG ---
+                NimBLERemoteService* pBattService = pClient->getService(battServiceUUID);
+                if (pBattService) {
+                    NimBLERemoteCharacteristic* pBattChar = pBattService->getCharacteristic(battCharUUID);
+                    if (pBattChar && pBattChar->canRead()) {
+                        player.eTagBatteryLevel = pBattChar->readValue<uint8_t>();
+                        Serial.printf("→ Batterie eTag Joueur %d: %d%%\n", playerNum, player.eTagBatteryLevel);
+                    }
+                } else {
+                    Serial.printf("→ Service batterie non trouvé pour eTag %d\n", playerNum);
+                }
+                // ------------------------------------------
                 
                 Serial.printf("✓ Joueur %d connecté!\n", playerNum);
                 player.bleClient = pClient;
@@ -1195,6 +1222,12 @@ bool connectPlayer(NimBLEAddress* address, Player& player, int playerNum) {
                 player.connected = true;
                 player.bleAddress = address;
                 displayScore();  // Mettre à jour l'affichage avec les indicateurs de connexion
+
+                // Déclencher une alerte si batterie faible (< 25%)
+                if (player.eTagBatteryLevel >= 0 && player.eTagBatteryLevel < 25) {
+                    lowBatPlayer = playerNum;
+                    lastLowBatTime = millis();
+                }
                 return true;
             }
         }
@@ -1285,6 +1318,28 @@ void processPendingClicks() {
             addPoint(player2, player1, 2);
             player2.pendingClick = false;
             player2.clickCount = 0;
+        }
+    }
+}
+
+/**
+ * Vérifie s'il faut afficher une alerte de batterie faible pour un eTag
+ */
+void checkETagBatteryAlert() {
+    static bool isAlertingBat = false;
+    
+    if (lastLowBatTime > 0) {
+        if (millis() - lastLowBatTime < LOW_BAT_MSG_DURATION) {
+            if (!isAlertingBat) {
+                isAlertingBat = true;
+                char msg[16];
+                sprintf(msg, "PILE J%d BASSE", lowBatPlayer);
+                displayMessage(msg, COLOR_ORANGE);
+            }
+        } else {
+            lastLowBatTime = 0;
+            isAlertingBat = false;
+            displayScore(); // Restaurer l'affichage du score
         }
     }
 }
@@ -1431,6 +1486,9 @@ void loop() {
     // Gestion de la reconnexion BLE
     handleBLEReconnection();
 
+    // Gestion des alertes batterie eTag
+    checkETagBatteryAlert();
+
     // Gestion des alertes visuelles de déconnexion
     checkConnLossAlert();
     
@@ -1492,12 +1550,12 @@ void loop() {
             case 's':  // Statut
             case 'S':
                 Serial.printf("\nStatut:\n");
-                Serial.printf("Joueur 1: %d points, %d jeux, %d sets - %s\n",
+                Serial.printf("Joueur 1: %d points, %d jeux, %d sets - %s (eTag Batt: %d%%)\n",
                             player1.points, player1.games, player1.sets,
-                            player1.connected ? "Connecté" : "Déconnecté");
-                Serial.printf("Joueur 2: %d points, %d jeux, %d sets - %s\n",
+                            player1.connected ? "Connecté" : "Déconnecté", player1.eTagBatteryLevel);
+                Serial.printf("Joueur 2: %d points, %d jeux, %d sets - %s (eTag Batt: %d%%)\n",
                             player2.points, player2.games, player2.sets,
-                            player2.connected ? "Connecté" : "Déconnecté");
+                            player2.connected ? "Connecté" : "Déconnecté", player2.eTagBatteryLevel);
                 Serial.printf("Deuce: %s\n", isDeuce ? "Oui" : "Non");
                 Serial.printf("En attente continuation: %s\n", waitingForSetContinue ? "Oui" : "Non");
                 break;
