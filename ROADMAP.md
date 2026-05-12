@@ -82,11 +82,18 @@
   - Affichage du score en temps réel
   - Contrôle à distance
 
-- [ ] **Application Mobile Dédiée**
-  - Android / iOS
-  - Configuration des joueurs
-  - Historique des matchs
-  - Statistiques détaillées
+- [x] **Application Mobile Dédiée** (Mode Visualisation)
+  - ✅ Android (APK installé et fonctionnel)
+  - ✅ Connexion BLE avec ESP32
+  - ✅ Visualisation du score en temps réel
+  - ✅ Statistiques de batterie (système + eTags)
+  - ✅ Informations de match (durée, service, deuce)
+  - ⚠️ Mode LECTURE SEULE uniquement
+  - ⚠️ Contrôle du score via eTags uniquement
+  - [ ] Historique des matchs en base de données locale
+  - [ ] Statistiques détaillées par joueur
+  - [ ] Export des données (CSV/PDF)
+  - [ ] iOS (développement futur)
 
 - [ ] **API REST**
   - Endpoints pour score actuel

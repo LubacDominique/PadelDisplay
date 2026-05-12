@@ -31,18 +31,32 @@ Application ESP32 pour afficher en temps réel les scores d'une partie de padel 
 - ✅ Réinitialisation du match
 - ✅ Mode veille automatique
 - ✅ Mesure et affichage du niveau de batterie LiFePO4
+- 📱 **Application Mobile** (Android/iOS) - Voir [MOBILE_APP.md](MOBILE_APP.md)
+  - Configuration des joueurs
+  - Historique des matchs
+  - Statistiques détaillées
+  - Contrôle via Bluetooth
 
 ## Structure du Projet
 
 ```
 PadelDisplay/
-├── README.md               # Ce fichier
-├── HARDWARE.md            # Schéma de connexion et composants
-├── BATTERY.md             # Guide mesure batterie LiFePO4 12.8V
-├── USAGE.md               # Guide d'utilisation
-├── platformio.ini         # Configuration PlatformIO
-└── src/
-    └── main.cpp           # Code source principal
+├── README.md                      # Ce fichier
+├── HARDWARE.md                    # Schéma de connexion et composants
+├── BATTERY.md                     # Guide mesure batterie LiFePO4 12.8V
+├── USAGE.md                       # Guide d'utilisation
+├── MOBILE_APP.md                  # 📱 Documentation app mobile complète
+├── MOBILE_APP_QUICKSTART.md       # 📱 Guide rapide app mobile
+├── ESP32_MOBILE_INTEGRATION.cpp   # 🔧 Code ESP32 pour app mobile
+├── platformio.ini                 # Configuration PlatformIO
+├── src/
+│   └── main.cpp                   # Code source principal
+└── mobile_app_examples/           # 📱 Exemples Flutter
+    ├── README.md
+    └── lib/
+        ├── services/
+        ├── models/
+        └── screens/
 ```
 
 ## Installation

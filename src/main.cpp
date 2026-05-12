@@ -21,6 +21,9 @@
 #include <NimBLEUtils.h>
 #include <NimBLEScan.h>
 #include <NimBLEAdvertisedDevice.h>
+#include <NimBLEServer.h>
+#include <NimBLEService.h>
+#include <NimBLECharacteristic.h>
 #include <SPIFFS.h>
 #include <PNGdec.h>
 
@@ -77,6 +80,18 @@ static NimBLEUUID charUUID("0000ffe1-0000-1000-8000-00805f9b34fb");
 static NimBLEUUID battServiceUUID((uint16_t)0x180F);
 static NimBLEUUID battCharUUID((uint16_t)0x2A19);
 
+// UUIDs pour le service de contrôle de score (Application Mobile)
+#define SERVICE_SCORE_UUID        "0000AA00-0000-1000-8000-00805F9B34FB"
+#define CHAR_SCORE_UPDATE_UUID    "0000AA01-0000-1000-8000-00805F9B34FB"
+#define CHAR_COMMAND_UUID         "0000AA02-0000-1000-8000-00805F9B34FB"
+#define CHAR_MATCH_STATUS_UUID    "0000AA03-0000-1000-8000-00805F9B34FB"
+#define CHAR_BATTERY_INFO_UUID    "0000AA04-0000-1000-8000-00805F9B34FB"
+
+// UUIDs pour le service de configuration joueurs (Application Mobile)
+#define SERVICE_PLAYER_UUID       "0000BB00-0000-1000-8000-00805F9B34FB"
+#define CHAR_PLAYER_NAMES_UUID    "0000BB01-0000-1000-8000-00805F9B34FB"
+#define CHAR_MATCH_CONFIG_UUID    "0000BB02-0000-1000-8000-00805F9B34FB"
+
 // ============================================================================
 // CONFIGURATION MESURE BATTERIE LiFePO4 12.8V 20Ah (3S)
 // ============================================================================
@@ -131,6 +146,7 @@ bool isDeuce = false;           // Égalité à 40-40
 bool gameInProgress = true;     // Partie en cours
 String lastMessage = "";        // Dernier message affiché
 bool waitingForSetContinue = false;  // Attend un clic pour continuer après victoire de set
+bool waitingForMatchReset = false;   // Attend un clic pour redémarrer après match gagné
 int currentServer = 1;          // Joueur qui sert actuellement (1 ou 2)
 
 // BLE Scan
@@ -167,6 +183,27 @@ PNG png;
 // Buffer pour l'image Set_RGB.png (64x32 pixels)
 uint16_t setImageBuffer[64 * 32];
 int bufferLineIndex = 0;  // Index de ligne pour remplir le buffer
+
+// ============================================================================
+// VARIABLES GLOBALES - APPLICATION MOBILE
+// ============================================================================
+
+// Serveur BLE pour mobile
+NimBLEServer* pServer = nullptr;
+NimBLECharacteristic* pScoreUpdateChar = nullptr;
+NimBLECharacteristic* pMatchStatusChar = nullptr;
+NimBLECharacteristic* pBatteryInfoChar = nullptr;
+NimBLECharacteristic* pPlayerNamesChar = nullptr;
+NimBLECharacteristic* pCommandChar = nullptr;
+
+// Noms des joueurs (personnalisables depuis l'app)
+String player1Name = "Joueur 1";
+String player2Name = "Joueur 2";
+
+// État de connexion mobile
+bool mobileConnected = false;
+unsigned long lastMobileNotify = 0;
+#define MOBILE_NOTIFY_INTERVAL 1000  // Notifications toutes les 1s
 
 // ============================================================================
 // DÉCLARATIONS FORWARD DES FONCTIONS
@@ -725,24 +762,25 @@ void displaySetWon(int playerNum) {
  * Affiche l'animation de match gagné
  */
 void displayMatchWon(int playerNum) {
-    for (int i = 0; i < 3; i++) {
-        clearDisplay();
-        dma_display->setTextSize(1);
-        dma_display->setCursor(4, 8);
-        dma_display->setTextColor(COLOR_YELLOW);
-        dma_display->print("MATCH!");
-        
-        dma_display->setCursor(8, 18);
-        dma_display->setTextColor(playerNum == 1 ? COLOR_RED : COLOR_GREEN);
-        dma_display->print("JOUEUR ");
-        dma_display->print(playerNum);
-        
-        delay(500);
-        clearDisplay();
-        delay(300);
-    }
+    clearDisplay();
     
+    // Afficher "MATCH!" en jaune
+    dma_display->setTextSize(1);
+    dma_display->setCursor(4, 8);
+    dma_display->setTextColor(COLOR_YELLOW);
+    dma_display->print("MATCH!");
+    
+    // Afficher le joueur gagnant
+    dma_display->setCursor(8, 18);
+    dma_display->setTextColor(playerNum == 1 ? COLOR_RED : COLOR_GREEN);
+    dma_display->print("JOUEUR ");
+    dma_display->print(playerNum);
+    
+    // Passer en mode attente de reset
     gameInProgress = false;
+    waitingForMatchReset = true;
+    
+    Serial.println("🏆 Match terminé ! En attente d'un clic pour redémarrer...");
 }
 
 /**
@@ -922,6 +960,11 @@ void checkMatchWon() {
  * Ajoute un point à un joueur
  */
 void addPoint(Player &player, Player &opponent, int playerNum) {
+    if (waitingForMatchReset) {
+        Serial.println("🏆 Match terminé. Cliquez sur un eTag pour redémarrer.");
+        return;
+    }
+    
     if (!gameInProgress) {
         Serial.println("Match terminé. Redémarrez pour une nouvelle partie.");
         return;
@@ -959,6 +1002,31 @@ void addPoint(Player &player, Player &opponent, int playerNum) {
     // (l'image Set_RGB.png doit rester affichée)
     if (!waitingForSetContinue) {
         displayScore();
+    }
+    
+    // Notifier l'application mobile
+    if (pScoreUpdateChar && mobileConnected) {
+        String scoreData = String(player1.points) + "," + 
+                          String(player1.games) + "," + 
+                          String(player1.sets) + "," +
+                          String(player2.points) + "," + 
+                          String(player2.games) + "," + 
+                          String(player2.sets);
+        std::string scoreStr = scoreData.c_str();
+        pScoreUpdateChar->setValue(scoreStr);
+        pScoreUpdateChar->notify();
+    }
+    if (pMatchStatusChar && mobileConnected) {
+        String statusJson = "{";
+        statusJson += "\"gameInProgress\":" + String(gameInProgress ? "true" : "false") + ",";
+        statusJson += "\"isDeuce\":" + String(isDeuce ? "true" : "false") + ",";
+        statusJson += "\"currentServer\":" + String(currentServer) + ",";
+        statusJson += "\"matchTime\":" + String(matchStartTime > 0 ? (millis() - matchStartTime) : 0) + ",";
+        statusJson += "\"lastPointTime\":" + String(lastPointTime);
+        statusJson += "}";
+        std::string statusStr = statusJson.c_str();
+        pMatchStatusChar->setValue(statusStr);
+        pMatchStatusChar->notify();
     }
 }
 
@@ -1003,6 +1071,17 @@ void handlePlayerClick(Player &player, Player &opponent, int playerNum) {
         matchStartTime = currentTime;
         lastPointTime = currentTime;
         Serial.println("⏱️ Premier clic détecté : Lancement des chronomètres !");
+    }
+    
+    // Si on attend le reset après un match gagné, n'importe quel clic redémarre
+    if (waitingForMatchReset) {
+        Serial.printf("🔄 Joueur %d a cliqué → Nouveau match\n", playerNum);
+        waitingForMatchReset = false;
+        resetMatch();
+        matchStartTime = millis();
+        lastPointTime = millis();
+        displayScore();
+        return;  // Ne pas traiter comme un point
     }
     
     // Si on attend la continuation après un set gagné, n'importe quel clic continue
@@ -1134,6 +1213,183 @@ class MyAdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
     }
 };
 
+// ============================================================================
+// CALLBACKS ET FONCTIONS - APPLICATION MOBILE
+// ============================================================================
+
+/**
+ * Callback pour détecter connexion/déconnexion de l'app mobile
+ */
+class MobileServerCallbacks: public NimBLEServerCallbacks {
+    void onConnect(NimBLEServer* pServer) {
+        mobileConnected = true;
+        Serial.println("📱 Application mobile connectée");
+    }
+    
+    void onDisconnect(NimBLEServer* pServer) {
+        mobileConnected = false;
+        Serial.println("📱 Application mobile déconnectée");
+        
+        // Redémarrer l'advertising
+        pServer->startAdvertising();
+    }
+};
+
+/**
+ * Callback pour réception de commandes depuis l'app mobile
+ */
+class CommandCallbacks: public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* pCharacteristic) {
+        std::string value = pCharacteristic->getValue();
+        String command = String(value.c_str());
+        
+        Serial.println("📱 Commande reçue: " + command);
+        
+        // ⚠️ COMMANDES DE CONTRÔLE DÉSACTIVÉES
+        // L'app mobile est en mode LECTURE SEULE (historique/statistiques uniquement)
+        // Le contrôle du score se fait UNIQUEMENT via les eTags
+        
+        if (command == "P1_ADD" || command == "P1_REMOVE" || 
+            command == "P2_ADD" || command == "P2_REMOVE" ||
+            command == "RESET" || command == "RESET_GAME") {
+            Serial.println("⚠️  Commande ignorée: contrôle désactivé depuis l'app mobile");
+            Serial.println("ℹ️  Utilisez les eTags pour contrôler le score");
+            return;
+        }
+        
+        // Seule commande autorisée: GET_STATUS (lecture seule)
+        if (command == "GET_STATUS") {
+            // Envoyer toutes les données immédiatement
+            if (pScoreUpdateChar && mobileConnected) {
+                String scoreData = String(player1.points) + "," + 
+                                  String(player1.games) + "," + 
+                                  String(player1.sets) + "," +
+                                  String(player2.points) + "," + 
+                                  String(player2.games) + "," + 
+                                  String(player2.sets);
+                std::string scoreStr = scoreData.c_str();
+                pScoreUpdateChar->setValue(scoreStr);
+                pScoreUpdateChar->notify();
+            }
+            if (pMatchStatusChar && mobileConnected) {
+                String statusJson = "{";
+                statusJson += "\"gameInProgress\":" + String(gameInProgress ? "true" : "false") + ",";
+                statusJson += "\"isDeuce\":" + String(isDeuce ? "true" : "false") + ",";
+                statusJson += "\"currentServer\":" + String(currentServer) + ",";
+                statusJson += "\"matchTime\":" + String(matchStartTime > 0 ? (millis() - matchStartTime) : 0) + ",";
+                statusJson += "\"lastPointTime\":" + String(lastPointTime);
+                statusJson += "}";
+                std::string statusStr = statusJson.c_str();
+                pMatchStatusChar->setValue(statusStr);
+                pMatchStatusChar->notify();
+            }
+            if (pBatteryInfoChar && mobileConnected) {
+                String batteryData = String(currentBatteryVoltage, 1) + "," +
+                                    String(currentBatteryPercentage) + "," +
+                                    String(player1.eTagBatteryLevel) + "," +
+                                    String(player2.eTagBatteryLevel);
+                std::string batteryStr = batteryData.c_str();
+                pBatteryInfoChar->setValue(batteryStr);
+                pBatteryInfoChar->notify();
+            }
+        }
+    }
+};
+
+/**
+ * Callback pour réception des noms de joueurs
+ */
+class PlayerNamesCallbacks: public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* pCharacteristic) {
+        std::string value = pCharacteristic->getValue();
+        String names = String(value.c_str());
+        
+        int commaIndex = names.indexOf(',');
+        if (commaIndex > 0) {
+            player1Name = names.substring(0, commaIndex);
+            player2Name = names.substring(commaIndex + 1);
+            
+            Serial.println("📝 Noms joueurs mis à jour:");
+            Serial.println("   J1: " + player1Name);
+            Serial.println("   J2: " + player2Name);
+            
+            displayScore();
+        }
+    }
+};
+
+/**
+ * Initialise le serveur BLE pour communication avec l'app mobile
+ */
+void setupBLEServer() {
+    Serial.println("🔧 Initialisation serveur BLE mobile...");
+    
+    // Créer le serveur BLE
+    pServer = NimBLEDevice::createServer();
+    pServer->setCallbacks(new MobileServerCallbacks());
+    
+    // ========== SERVICE SCORE CONTROL ==========
+    NimBLEService* pScoreService = pServer->createService(SERVICE_SCORE_UUID);
+    
+    // Caractéristique Score Update (Read/Notify)
+    pScoreUpdateChar = pScoreService->createCharacteristic(
+        CHAR_SCORE_UPDATE_UUID,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
+    );
+    pScoreUpdateChar->setValue("0,0,0,0,0,0");
+    
+    // Caractéristique Command (Write)
+    pCommandChar = pScoreService->createCharacteristic(
+        CHAR_COMMAND_UUID,
+        NIMBLE_PROPERTY::WRITE
+    );
+    pCommandChar->setCallbacks(new CommandCallbacks());
+    
+    // Caractéristique Match Status (Read/Notify)
+    pMatchStatusChar = pScoreService->createCharacteristic(
+        CHAR_MATCH_STATUS_UUID,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
+    );
+    
+    // Caractéristique Battery Info (Read/Notify)
+    pBatteryInfoChar = pScoreService->createCharacteristic(
+        CHAR_BATTERY_INFO_UUID,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
+    );
+    
+    pScoreService->start();
+    
+    // ========== SERVICE PLAYER CONFIGURATION ==========
+    NimBLEService* pPlayerService = pServer->createService(SERVICE_PLAYER_UUID);
+    
+    // Caractéristique Player Names (Read/Write)
+    pPlayerNamesChar = pPlayerService->createCharacteristic(
+        CHAR_PLAYER_NAMES_UUID,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE
+    );
+    pPlayerNamesChar->setCallbacks(new PlayerNamesCallbacks());
+    pPlayerNamesChar->setValue("Joueur 1,Joueur 2");
+    
+    // Caractéristique Match Config (Read/Write)
+    NimBLECharacteristic* pMatchConfigChar = pPlayerService->createCharacteristic(
+        CHAR_MATCH_CONFIG_UUID,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE
+    );
+    
+    pPlayerService->start();
+    
+    // ========== DÉMARRER L'ADVERTISING ==========
+    NimBLEAdvertising* pAdvertising = pServer->getAdvertising();
+    pAdvertising->addServiceUUID(SERVICE_SCORE_UUID);
+    pAdvertising->addServiceUUID(SERVICE_PLAYER_UUID);
+    pAdvertising->setScanResponse(true);
+    pAdvertising->setMinPreferred(0x06);
+    pAdvertising->setMaxPreferred(0x12);
+    pAdvertising->start();
+    
+    Serial.println("✅ Serveur BLE Mobile démarré");
+}
+
 /**
  * Initialise le BLE et lance le scan
  */
@@ -1141,6 +1397,10 @@ void initBLE() {
     Serial.println("Initialisation NimBLE...");
     
     NimBLEDevice::init("PadelDisplay");
+    
+    // Initialiser le serveur BLE pour application mobile
+    setupBLEServer();
+    
     pBLEScan = NimBLEDevice::getScan();
     pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
     pBLEScan->setActiveScan(true);
@@ -1491,6 +1751,32 @@ void loop() {
 
     // Gestion des alertes visuelles de déconnexion
     checkConnLossAlert();
+    
+    // Notifier l'app mobile périodiquement (si connectée)
+    if (mobileConnected && (millis() - lastMobileNotify > MOBILE_NOTIFY_INTERVAL)) {
+        if (pBatteryInfoChar) {
+            String batteryData = String(currentBatteryVoltage, 1) + "," +
+                                String(currentBatteryPercentage) + "," +
+                                String(player1.eTagBatteryLevel) + "," +
+                                String(player2.eTagBatteryLevel);
+            std::string batteryStr = batteryData.c_str();
+            pBatteryInfoChar->setValue(batteryStr);
+            pBatteryInfoChar->notify();
+        }
+        if (pMatchStatusChar) {
+            String statusJson = "{";
+            statusJson += "\"gameInProgress\":" + String(gameInProgress ? "true" : "false") + ",";
+            statusJson += "\"isDeuce\":" + String(isDeuce ? "true" : "false") + ",";
+            statusJson += "\"currentServer\":" + String(currentServer) + ",";
+            statusJson += "\"matchTime\":" + String(matchStartTime > 0 ? (millis() - matchStartTime) : 0) + ",";
+            statusJson += "\"lastPointTime\":" + String(lastPointTime);
+            statusJson += "}";
+            std::string statusStr = statusJson.c_str();
+            pMatchStatusChar->setValue(statusStr);
+            pMatchStatusChar->notify();
+        }
+        lastMobileNotify = millis();
+    }
     
     // Rafraîchir l'affichage du timer toutes les secondes (Roadmap V1.1)
     static unsigned long lastTimerRefresh = 0;
