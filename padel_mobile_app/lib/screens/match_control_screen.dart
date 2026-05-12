@@ -304,29 +304,6 @@ class _MatchControlScreenState extends State<MatchControlScreen> {
       child: Column(
         children: [
           // Message d'information
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.blue[50],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue, width: 1),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline, color: Colors.blue[700]),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Mode visualisation uniquement\nUtilisez les eTags pour contrôler le score',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.blue[900],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
           
           const SizedBox(height: 12),
           

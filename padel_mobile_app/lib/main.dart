@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'services/ble_service.dart';
-import 'models/player.dart';
-import 'screens/match_control_screen.dart';
+import 'screens/player_setup_screen.dart';
 import 'screens/history_screen.dart';
 
 void main() {
@@ -160,10 +159,7 @@ class HomeScreen extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => MatchControlScreen(
-                          player1: Player(name: 'Joueur 1'),
-                          player2: Player(name: 'Joueur 2'),
-                        ),
+                        builder: (context) => const PlayerSetupScreen(),
                       ),
                     );
                   },
