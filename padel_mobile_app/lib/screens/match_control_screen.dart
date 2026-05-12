@@ -6,7 +6,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/ble_service.dart';
+import '../services/database_service.dart';
 import '../models/player.dart';
+import '../models/match.dart';
 
 class MatchControlScreen extends StatefulWidget {
   final Player player1;
@@ -29,6 +31,9 @@ class _MatchControlScreenState extends State<MatchControlScreen> {
   
   final List<String> _pointHistory = [];
   DateTime? _matchStartTime;
+  bool _matchSaved = false;
+  
+  final DatabaseService _db = DatabaseService.instance;
   
   @override
   void initState() {
@@ -52,6 +57,11 @@ class _MatchControlScreenState extends State<MatchControlScreen> {
     
     // Écouter les mises à jour de score
     bleService.scoreStream.listen((score) {
+      
+      // Vérifier si le match est terminé (un joueur a gagné 2 sets)
+      if (!_matchSaved && (score.player1Sets >= 2 || score.player2Sets >= 2)) {
+        _saveAndShowMatchResult(score);
+      }
       setState(() {
         _currentScore = score;
       });
@@ -559,4 +569,134 @@ class _MatchControlScreenState extends State<MatchControlScreen> {
       ],
     );
   }
+  
+  Future<void> _saveAndShowMatchResult(ScoreData score) async {
+    _matchSaved = true;
+    
+    try {
+      // Créer ou récupérer les joueurs
+      final player1 = await _db.createOrGetPlayer(widget.player1.name);
+      final player2 = await _db.createOrGetPlayer(widget.player2.name);
+      
+      // Calculer la durée du match
+      final durationSeconds = _matchStatus?.matchTime != null
+          ? (_matchStatus!.matchTime / 1000).round()
+          : (_matchStartTime != null
+              ? DateTime.now().difference(_matchStartTime!).inSeconds
+              : 0);
+      
+      // Déterminer le gagnant
+      final winnerId = score.player1Sets > score.player2Sets
+          ? player1.id
+          : player2.id;
+      
+      // Créer le match
+      final match = Match(
+        matchDate: _matchStartTime ?? DateTime.now(),
+        player1Id: player1.id!,
+        player2Id: player2.id!,
+        player1Sets: score.player1Sets,
+        player2Sets: score.player2Sets,
+        durationSeconds: durationSeconds,
+        completed: true,
+        winnerId: winnerId,
+      );
+      
+      // Sauvegarder dans la base de données
+      await _db.saveMatch(match);
+      
+      // Afficher le dialogue de résultat
+      if (mounted) {
+        _showMatchResultDialog(
+          score.player1Sets > score.player2Sets ? widget.player1.name : widget.player2.name,
+          score.player1Sets,
+          score.player2Sets,
+          durationSeconds,
+        );
+      }
+    } catch (e) {
+      debugPrint('Erreur sauvegarde match: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de la sauvegarde: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+  
+  void _showMatchResultDialog(String winner, int sets1, int sets2, int durationSeconds) {
+    final duration = Duration(seconds: durationSeconds);
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds % 60;
+    final durationStr = '${minutes}m ${seconds}s';
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.emoji_events, color: Colors.amber[700], size: 32),
+            const SizedBox(width: 12),
+            const Text('Match terminé !'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '🎉 Félicitations à $winner !',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Score final: $sets1 - $sets2',
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Durée: $durationStr',
+              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Match sauvegardé dans l\'historique',
+              style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Fermer le dialogue
+              Navigator.pop(context); // Retourner à l'écran d'accueil
+            },
+            child: const Text('Retour à l\'accueil'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context); // Fermer le dialogue
+              // Réinitialiser le match
+              _matchSaved = false;
+              _matchStartTime = DateTime.now();
+              final bleService = context.read<BLEService>();
+              await bleService.resetMatch();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+            ),
+            child: const Text('Nouveau match'),
+          ),
+        ],
+      ),
+    );
+  }
 }
+

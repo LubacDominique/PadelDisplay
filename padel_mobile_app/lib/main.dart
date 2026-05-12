@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'services/ble_service.dart';
 import 'models/player.dart';
 import 'screens/match_control_screen.dart';
+import 'screens/history_screen.dart';
 
 void main() {
   runApp(
@@ -40,6 +41,18 @@ class HomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Padel Display'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const HistoryScreen(),
+                ),
+              );
+            },
+            tooltip: 'Historique',
+          ),
           Icon(
             bleService.isConnected 
                 ? Icons.bluetooth_connected 

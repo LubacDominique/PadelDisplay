@@ -90,8 +90,8 @@
   - ✅ Informations de match (durée, service, deuce)
   - ⚠️ Mode LECTURE SEULE uniquement
   - ⚠️ Contrôle du score via eTags uniquement
-  - [ ] Historique des matchs en base de données locale
-  - [ ] Statistiques détaillées par joueur
+  - ✅ Historique des matchs en base de données locale
+  - ✅ Statistiques détaillées par joueur
   - [ ] Export des données (CSV/PDF)
   - [ ] iOS (développement futur)
 
