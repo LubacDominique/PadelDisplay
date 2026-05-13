@@ -53,13 +53,13 @@ jobs:
       - name: 🔍 Flutter Doctor
         run: flutter doctor -v
       
-      - name: 📦 Get Flutter Dependencies
-        working-directory: ./padel_mobile_app
-        run: flutter pub get
-      
       - name: 🧹 Clean Project
         working-directory: ./padel_mobile_app
         run: flutter clean
+      
+      - name: 📦 Get Flutter Dependencies
+        working-directory: ./padel_mobile_app
+        run: flutter pub get
       
       - name: 🔧 Install CocoaPods Dependencies
         working-directory: ./padel_mobile_app/ios
