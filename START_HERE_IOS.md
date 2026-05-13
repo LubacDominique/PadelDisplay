@@ -4,23 +4,28 @@
 
 Tous les fichiers nécessaires pour générer votre application iPhone ont été créés avec succès!
 
-## 🚀 Prochaine Étape (5 minutes)
+## 🚀 Prochaine Étape (3 minutes)
 
-### 1️⃣ Créer un Repo GitHub
+### 1️⃣ Créer un Repo GitHub et Pousser le Code
 
 ```powershell
-# Ouvrir PowerShell dans le dossier PadelDisplay
-cd f:\VsCode\PadelDisplay
+# Votre Git local existe déjà avec tous les fichiers ✅
+# Pas besoin de git init!
 
-# Initialiser Git
-git init
-git add .
-git commit -m "🎉 Initial commit - Padel Display + iOS Build"
+# 1. Créer un nouveau repo VIDE sur github.com
+#    - Allez sur: https://github.com/new
+#    - Nom: "PadelDisplay" (ou autre nom)
+#    - Type: Public (pour GitHub Actions gratuit)
+#    - ⚠️ NE PAS cocher "Initialize with README" (repo doit être vide)
+#    - Cliquez "Create repository"
 
-# Créer un nouveau repo sur github.com (nommez-le "PadelDisplay")
-# Puis exécuter:
+# 2. Configurer le remote GitHub
 git remote add origin https://github.com/VOTRE_USERNAME/PadelDisplay.git
+
+# 3. Renommer la branche en 'main' (si nécessaire)
 git branch -M main
+
+# 4. Pousser vers GitHub
 git push -u origin main
 ```
 

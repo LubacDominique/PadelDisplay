@@ -31,11 +31,11 @@ Votre projet est maintenant configuré pour générer automatiquement l'applicat
 ### Méthode GitHub Actions (Depuis Windows) ⭐
 
 ```bash
-# 1. Pousser sur GitHub
-git init
-git add .
-git commit -m "Initial commit"
+# Votre Git local existe déjà avec tous les fichiers ✅
+
+# 1. Créer repo VIDE sur https://github.com/new puis:
 git remote add origin https://github.com/VOTRE_USERNAME/PadelDisplay.git
+git branch -M main
 git push -u origin main
 
 # 2. Aller sur GitHub > Actions > Build iOS App

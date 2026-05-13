@@ -5,12 +5,15 @@
 ### Étape 1️⃣: Créer un Repo GitHub
 
 ```bash
-# Dans le dossier PadelDisplay
-git init
-git add .
-git commit -m "🎉 Initial commit - Padel Display iOS App"
+# Votre Git local existe déjà avec tous les fichiers ✅
+# Pas besoin de git init!
 
-# Créer un nouveau repo sur github.com puis:
+# 1. Créer un nouveau repo VIDE sur https://github.com/new
+#    - Nom: "PadelDisplay"
+#    - Type: Public (pour GitHub Actions gratuit)
+#    - ⚠️ NE PAS cocher "Initialize with README"
+
+# 2. Configurer le remote et pousser
 git remote add origin https://github.com/VOTRE_USERNAME/PadelDisplay.git
 git branch -M main
 git push -u origin main
