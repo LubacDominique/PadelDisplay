@@ -20,7 +20,7 @@ Tous les fichiers nécessaires pour générer votre application iPhone ont été
 #    - Cliquez "Create repository"
 
 # 2. Configurer le remote GitHub
-git remote add origin https://github.com/VOTRE_USERNAME/PadelDisplay.git
+git remote add origin https://github.com/LubacDominique/PadelDisplay.git
 
 # 3. Renommer la branche en 'main' (si nécessaire)
 git branch -M main
