@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Méthode de distribution: development, ad-hoc, app-store, enterprise -->
+	<key>method</key>
+	<string>development</string>
+	
+	<!-- Compiler les bitcode (obsolète depuis Xcode 14) -->
+	<key>uploadBitcode</key>
+	<false/>
+	
+	<!-- Compiler pour tous les appareils -->
+	<key>compileBitcode</key>
+	<false/>
+	
+	<!-- Team ID (optionnel, à remplir si nécessaire) -->
+	<!-- <key>teamID</key>
+	<string>YOUR_TEAM_ID</string> -->
+	
+	<!-- Provisioning profile (optionnel) -->
+	<!-- <key>provisioningProfiles</key>
+	<dict>
+		<key>com.yourcompany.padeldisplay</key>
+		<string>YOUR_PROVISIONING_PROFILE_NAME</string>
+	</dict> -->
+	
+	<!-- Signature automatique -->
+	<key>signingStyle</key>
+	<string>automatic</string>
+	
+	<!-- Certificat de signature -->
+	<key>signingCertificate</key>
+	<string>Apple Development</string>
+	
+	<!-- Activer le strip de symboles -->
+	<key>stripSwiftSymbols</key>
+	<true/>
+	
+	<!-- Thining pour App Store -->
+	<key>thinning</key>
+	<string>&lt;none&gt;</string>
+</dict>
+</plist>

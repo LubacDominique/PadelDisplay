@@ -1,0 +1,51 @@
+name: CI/CD Tests
+
+# Workflow pour tester les builds avant de pousser
+# Optionnel mais recommandé
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'padel_mobile_app/**'
+      - '.github/workflows/**'
+
+jobs:
+  test-build:
+    name: Test Build
+    runs-on: macos-latest
+    
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+      
+      - name: 📱 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+      
+      - name: 🔍 Analyze Code
+        working-directory: ./padel_mobile_app
+        run: |
+          flutter analyze
+      
+      - name: 🧪 Run Tests
+        working-directory: ./padel_mobile_app
+        run: |
+          flutter test
+      
+      - name: ✅ Build Check
+        working-directory: ./padel_mobile_app
+        run: |
+          flutter build ios --debug --no-codesign
+      
+      - name: 📊 Summary
+        if: always()
+        run: |
+          echo "### 📱 Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Code analysis completed" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Tests completed" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Build check completed" >> $GITHUB_STEP_SUMMARY
