@@ -770,17 +770,23 @@ void displayMatchWon(int playerNum) {
     dma_display->setTextColor(COLOR_YELLOW);
     dma_display->print("MATCH!");
     
-    // Afficher le joueur gagnant
+    // Afficher le joueur gagnant avec son nom
+    String winnerName = (playerNum == 1) ? player1Name : player2Name;
+    
+    // Tronquer le nom si trop long (max 10 caractères pour écran 64px)
+    if (winnerName.length() > 10) {
+        winnerName = winnerName.substring(0, 10);
+    }
+    
     dma_display->setCursor(8, 18);
     dma_display->setTextColor(playerNum == 1 ? COLOR_RED : COLOR_GREEN);
-    dma_display->print("JOUEUR ");
-    dma_display->print(playerNum);
+    dma_display->print(winnerName);
     
     // Passer en mode attente de reset
     gameInProgress = false;
     waitingForMatchReset = true;
     
-    Serial.println("🏆 Match terminé ! En attente d'un clic pour redémarrer...");
+    Serial.println("🏆 Match terminé ! Gagnant: " + winnerName);
 }
 
 /**
